@@ -63,6 +63,10 @@ the process is inspectable rather than asserted.
 there are no maintenance branches and never have been. The `retract`
 directives in `go.mod` mark versions that should not be used.
 
+Each release from v1.60.0 on has a signed provenance document, linked from its
+[GitLab release](https://gitlab.com/cznic/sqlite/-/releases); [VERIFYING.md](VERIFYING.md)
+says what it proves and how to check it.
+
 ## Scope
 
 In scope, with a security consequence:

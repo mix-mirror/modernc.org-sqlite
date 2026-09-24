@@ -64,7 +64,7 @@ build_all_targets:
 	echo done
 
 clean:
-	rm -f log-* cpu.test mem.test *.out go.work* licgen
+	rm -f log-* cpu.test mem.test *.out go.work* licgen attest
 	go clean
 
 edit:
@@ -75,6 +75,7 @@ editor:
 	go build -v  -o /dev/null ./...
 	cd vendor_libs && go build -o /dev/null main.go stamp.go
 	cd licensegen && go build -tags none -o /dev/null .
+	cd attestgen && go build -tags none -o /dev/null .
 
 # Regenerate LICENSE-3RD-PARTY.md, SBOM.md and the two machine-readable SBOMs
 # from the module graph and the vendored C. Run after any dependency bump or

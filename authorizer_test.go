@@ -7,6 +7,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -47,6 +48,17 @@ func registerAuthorizer(t *testing.T, conn *sql.Conn, fn AuthorizerFn) {
 		return registerer.RegisterAuthorizer(fn)
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func requireAuthorizerError(t *testing.T, err error) {
+	t.Helper()
+	var sqliteErr *Error
+	if !errors.As(err, &sqliteErr) {
+		t.Fatalf("error = %v (%T), want *Error", err, err)
+	}
+	if got := sqliteErr.Code(); got != sqlite3.SQLITE_AUTH {
+		t.Fatalf("error code = %d, want SQLITE_AUTH (%d): %v", got, sqlite3.SQLITE_AUTH, err)
 	}
 }
 
@@ -153,6 +165,8 @@ func TestAuthorizerCallbackArguments(t *testing.T) {
 	if err := conn.QueryRowContext(context.Background(), `SELECT v FROM t`).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
+	// SQLite supplies NULL for triggerOrView on a direct read. The public API
+	// deliberately represents it as the empty string.
 	if want := (authorizerCall{AuthRead, "t", "v", "main", ""}); !hasCall(want) {
 		t.Fatalf("direct read calls = %#v, want %#v", calls, want)
 	}
@@ -161,6 +175,8 @@ func TestAuthorizerCallbackArguments(t *testing.T) {
 	if _, err := conn.ExecContext(context.Background(), `INSERT INTO t VALUES ('two')`); err != nil {
 		t.Fatal(err)
 	}
+	// SQLite supplies NULL for arg2 on INSERT. The public API deliberately
+	// represents it as the empty string.
 	if want := (authorizerCall{AuthInsert, "audit", "", "main", "t_after_insert"}); !hasCall(want) {
 		t.Fatalf("trigger calls = %#v, want %#v", calls, want)
 	}
@@ -174,17 +190,39 @@ func TestAuthorizerPreparedAndRepreparedStatement(t *testing.T) {
 	deny := func(AuthorizerActionCode, string, string, string, string) AuthorizerReturnCode {
 		return AuthorizerDeny
 	}
-	registerAuthorizer(t, conn, allow)
 	stmt, err := conn.PrepareContext(context.Background(), `SELECT v FROM t`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stmt.Close()
 
-	registerAuthorizer(t, conn, deny)
 	var got string
+	if err := stmt.QueryRowContext(context.Background()).Scan(&got); err != nil {
+		t.Fatalf("prepared statement before installing authorizer: %v", err)
+	}
+
+	// sqlite3_set_authorizer expires prepared statements unconditionally.
+	// Installation, replacement, and removal must therefore transparently
+	// reprepare this same statement and apply the then-current policy.
+	registerAuthorizer(t, conn, deny)
 	if err := stmt.QueryRowContext(context.Background()).Scan(&got); err == nil {
-		t.Fatal("prepared statement succeeded after replacing its authorizer with deny-all")
+		t.Fatal("prepared statement succeeded after installing deny-all authorizer")
+	} else {
+		requireAuthorizerError(t, err)
+	}
+	registerAuthorizer(t, conn, allow)
+	if err := stmt.QueryRowContext(context.Background()).Scan(&got); err != nil {
+		t.Fatalf("prepared statement after replacing authorizer with allow-all: %v", err)
+	}
+	registerAuthorizer(t, conn, deny)
+	if err := stmt.QueryRowContext(context.Background()).Scan(&got); err == nil {
+		t.Fatal("prepared statement succeeded after replacing authorizer with deny-all")
+	} else {
+		requireAuthorizerError(t, err)
+	}
+	registerAuthorizer(t, conn, nil)
+	if err := stmt.QueryRowContext(context.Background()).Scan(&got); err != nil {
+		t.Fatalf("prepared statement after removing authorizer: %v", err)
 	}
 
 	var denyReprepare atomic.Bool
@@ -228,6 +266,60 @@ func TestAuthorizerPreparedAndRepreparedStatement(t *testing.T) {
 	}
 }
 
+func TestAuthorizerDriverTransactionStatements(t *testing.T) {
+	_, conn := authorizerConn(t)
+
+	var beginSeen atomic.Bool
+	registerAuthorizer(t, conn, func(action AuthorizerActionCode, arg1, _, _, _ string) AuthorizerReturnCode {
+		if action == AuthTransaction && arg1 == "BEGIN" {
+			beginSeen.Store(true)
+			return AuthorizerDeny
+		}
+		return AuthorizerOK
+	})
+	if _, err := conn.BeginTx(context.Background(), nil); err == nil {
+		t.Fatal("BeginTx succeeded when the authorizer denied BEGIN")
+	} else {
+		requireAuthorizerError(t, err)
+	}
+	if !beginSeen.Load() {
+		t.Fatal("driver-issued BEGIN did not reach the authorizer")
+	}
+
+	registerAuthorizer(t, conn, func(AuthorizerActionCode, string, string, string, string) AuthorizerReturnCode {
+		return AuthorizerOK
+	})
+	tx, err := conn.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var commitSeen, rollbackSeen atomic.Bool
+	registerAuthorizer(t, conn, func(action AuthorizerActionCode, arg1, _, _, _ string) AuthorizerReturnCode {
+		if action != AuthTransaction {
+			return AuthorizerOK
+		}
+		switch arg1 {
+		case "COMMIT":
+			commitSeen.Store(true)
+			return AuthorizerDeny
+		case "ROLLBACK":
+			rollbackSeen.Store(true)
+		}
+		return AuthorizerOK
+	})
+	if err := tx.Commit(); err == nil {
+		t.Fatal("Commit succeeded when the authorizer denied COMMIT")
+	} else {
+		requireAuthorizerError(t, err)
+	}
+	if !commitSeen.Load() {
+		t.Fatal("driver-issued COMMIT did not reach the authorizer")
+	}
+	if !rollbackSeen.Load() {
+		t.Fatal("failed Commit did not issue the cleanup ROLLBACK")
+	}
+}
+
 func TestAuthorizerConnectionPoolReuse(t *testing.T) {
 	db, conn := authorizerConn(t)
 	var calls atomic.Int64
@@ -250,6 +342,60 @@ func TestAuthorizerConnectionPoolReuse(t *testing.T) {
 	}
 	if calls.Load() == 0 {
 		t.Fatal("authorizer was not invoked after pool reuse")
+	}
+}
+
+func TestAuthorizerRegisterConnectionHookPool(t *testing.T) {
+	const n = 4
+	d := &Driver{}
+	var opened atomic.Int64
+	d.RegisterConnectionHook(func(driverConn ExecQuerierContext, _ string) error {
+		opened.Add(1)
+		registerer, ok := driverConn.(AuthorizerRegisterer)
+		if !ok {
+			return fmt.Errorf("driver connection does not implement AuthorizerRegisterer")
+		}
+		return registerer.RegisterAuthorizer(func(action AuthorizerActionCode, _, _, _, _ string) AuthorizerReturnCode {
+			if action == AuthSelect {
+				return AuthorizerDeny
+			}
+			return AuthorizerOK
+		})
+	})
+
+	name := uniqueDriverName(t)
+	sql.Register(name, d)
+	db, err := sql.Open(name, filepath.Join(t.TempDir(), "pool.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(n)
+	t.Cleanup(func() { db.Close() })
+
+	connections := make([]*sql.Conn, 0, n)
+	for i := 0; i < n; i++ {
+		conn, err := db.Conn(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		connections = append(connections, conn)
+	}
+	t.Cleanup(func() {
+		for _, conn := range connections {
+			conn.Close()
+		}
+	})
+	if got := opened.Load(); got != n {
+		t.Fatalf("connection hooks called %d times, want %d distinct physical connections", got, n)
+	}
+
+	for i, conn := range connections {
+		var got int
+		err := conn.QueryRowContext(context.Background(), `SELECT 1`).Scan(&got)
+		if err == nil {
+			t.Fatalf("connection %d allowed forbidden SELECT", i)
+		}
+		requireAuthorizerError(t, err)
 	}
 }
 

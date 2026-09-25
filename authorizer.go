@@ -71,13 +71,37 @@ const (
 // connection that invoked it, including by preparing or stepping SQL on that
 // connection.
 //
+// SQLite NULL callback arguments are passed as empty strings, so AuthorizerFn
+// cannot distinguish NULL from an actual empty string.
+//
 // SQLite invokes the callback during statement preparation and may invoke it
 // again when a statement is automatically reprepared. The strings are owned by
-// Go and remain valid after the callback returns.
+// Go and remain valid after the callback returns. The authorizer also applies
+// to statements the driver prepares on the connection. In particular, BEGIN,
+// COMMIT, and ROLLBACK are presented as [AuthTransaction], so denying that
+// action can make BeginTx or transaction completion fail.
 type AuthorizerFn func(action AuthorizerActionCode, arg1, arg2, databaseName, triggerOrView string) AuthorizerReturnCode
 
 // AuthorizerRegisterer exposes the authorizer of a physical SQLite connection.
-// Reach it through database/sql's [database/sql.Conn.Raw] escape hatch:
+// To install one policy consistently on every physical connection in a
+// database/sql pool, use [RegisterConnectionHook] before opening any
+// connections:
+//
+//	sqlite.RegisterConnectionHook(func(driverConn sqlite.ExecQuerierContext, _ string) error {
+//		registerer, ok := driverConn.(sqlite.AuthorizerRegisterer)
+//		if !ok {
+//			return fmt.Errorf("driver does not support an authorizer")
+//		}
+//		return registerer.RegisterAuthorizer(fn)
+//	})
+//	db, err := sql.Open("sqlite", dsn)
+//
+// Use [Driver.RegisterConnectionHook] instead for a caller-constructed Driver.
+// The hook runs once for each newly opened connection. Install the policy in
+// the hook and do not retain driverConn after the hook returns.
+//
+// For a policy intentionally limited to one physical connection, use
+// database/sql's [database/sql.Conn.Raw] escape hatch:
 //
 //	err := sqlConn.Raw(func(driverConn any) error {
 //		registerer, ok := driverConn.(sqlite.AuthorizerRegisterer)
@@ -88,11 +112,20 @@ type AuthorizerFn func(action AuthorizerActionCode, arg1, arg2, databaseName, tr
 //	})
 //
 // RegisterAuthorizer must be called within the Raw callback; the underlying
-// driver connection must not be used after the callback returns.
+// driver connection must not be used after the callback returns. The installed
+// policy remains on that physical connection after sqlConn is returned to the
+// pool, so Raw is not a substitute for the connection-hook pattern when every
+// pooled connection must share one policy.
 //
 // RegisterAuthorizer replaces any authorizer already installed on the
 // connection. Passing nil removes it. The callback remains installed until it
-// is replaced, removed, or the connection is closed.
+// is replaced, removed, or the connection is closed. Installing, replacing, or
+// removing an authorizer expires prepared statements on that connection;
+// SQLite transparently prepares them again on next use and authorizes them
+// under the then-current policy.
+//
+// The callback bridge is fail-closed: if SQLite invokes it when no Go callback
+// is registered for the SQLite handle, it returns [AuthorizerDeny].
 type AuthorizerRegisterer interface {
 	RegisterAuthorizer(AuthorizerFn) error
 }

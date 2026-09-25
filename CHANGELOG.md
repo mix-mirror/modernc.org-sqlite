@@ -2,6 +2,9 @@
 
 Entries for v1.38.1 through v1.44.1 and for v1.49.1 were added on 2026-09-05, reconstructed from the git history and the merge requests they cite; they were missing at release time.
 
+ - Unreleased:
+     - Add opt-in per-connection SQLite authorizers through `AuthorizerRegisterer`. Use `RegisterConnectionHook` for a uniform `database/sql` pool policy or `sql.Conn.Raw` for one physical connection; existing connections are unchanged. See [GitLab merge request #139](https://gitlab.com/cznic/sqlite/-/merge_requests/139).
+
  - 2026-09-15 v1.59.1:
      - **`vfs.FS.Close` now refuses while a database opened through it is still open**, returning an error that wraps the new `vfs.ErrInUse` and leaving the VFS registered. It used to free the VFS the open connection still called through, so the next query crashed the process or read through freed memory. Close the databases first, then the `FS`.
      - Fix handle reuse in `modernc.org/sqlite/vfs` on 32-bit targets: after 2^32 file opens in one process the handle counter wrapped and could overwrite a live entry, such as a file system registered at start-up, and crash. 64-bit targets were not affected.

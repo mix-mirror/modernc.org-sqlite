@@ -237,10 +237,12 @@ func defaultDriver() *Driver { return d }
 // https://www.sqlite.org/security.html); this build compiles with neither
 // SQLITE_TRUSTED_SCHEMA=0 nor SQLITE_DQS=0, so _defensive=1 alone does not make
 // opening an untrusted file safe. The driver exposes SQLite's authorizer as an
-// opt-in [AuthorizerRegisterer] capability; callers relying on it must
-// explicitly configure appropriate policy on each physical connection. It is
-// also a property of the connection, not of the database: another connection
-// to the same file, opened without the parameter, is unrestricted.
+// opt-in [AuthorizerRegisterer] capability. For pool-wide enforcement, install
+// the policy on every newly opened physical connection with
+// [RegisterConnectionHook] (or [Driver.RegisterConnectionHook] on a
+// caller-constructed Driver); database/sql's Conn.Raw is the per-connection
+// escape hatch. The policy is a property of the connection, not of the
+// database: another connection to the same file without it is unrestricted.
 // See: https://www.sqlite.org/c3ref/c_dbconfig_defensive.html
 //
 // _error_rc: Opt-in error-string reporting mode for synthesised errors.

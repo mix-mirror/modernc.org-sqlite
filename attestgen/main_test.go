@@ -142,6 +142,42 @@ func TestNotYet(t *testing.T) {
 	}
 }
 
+func TestSiblings(t *testing.T) {
+	lib, vec := strings.Repeat("d", 40), strings.Repeat("3", 40)
+	write := func(sources string) string {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "vendor.json"), []byte(`{"go": "go1.27.1", "sources": [`+sources+`]}`), 0o644)
+		return dir
+	}
+	good := `{"module": "modernc.org/libsqlite3", "into": "lib", "commit": "` + lib + `"},
+		{"module": "modernc.org/libsqlite_vec", "into": "vec", "commit": "` + vec + `"}`
+	var out strings.Builder
+	if err := siblings(write(good), &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "https://gitlab.com/cznic/libsqlite3.git " + lib + " ../libsqlite3\n" +
+		"https://gitlab.com/cznic/libsqlite_vec.git " + vec + " ../libsqlite_vec\n"
+	if out.String() != want {
+		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)
+	}
+	for name, sources := range map[string]string{
+		"one source":    `{"module": "modernc.org/libsqlite3", "into": "lib", "commit": "` + lib + `"}`,
+		"swapped":       `{"module": "modernc.org/libsqlite_vec", "into": "vec", "commit": "` + vec + `"}, {"module": "modernc.org/libsqlite3", "into": "lib", "commit": "` + lib + `"}`,
+		"other module":  strings.Replace(good, "modernc.org/libsqlite_vec", "example.com/libsqlite_vec", 1),
+		"other dir":     strings.Replace(good, `"into": "vec"`, `"into": "lib2"`, 1),
+		"short commit":  strings.Replace(good, lib, lib[:12], 1),
+		"branch commit": strings.Replace(good, lib, "master", 1),
+	} {
+		out.Reset()
+		if err := siblings(write(sources), &out); err == nil || out.Len() != 0 {
+			t.Errorf("%s: err %v, printed %q", name, err, out.String())
+		}
+	}
+	if err := siblings(t.TempDir(), &out); err == nil {
+		t.Error("no vendor.json: accepted")
+	}
+}
+
 // ---- observe, with a scripted download and a real git repository
 
 func gitRepo(t *testing.T, tag string) (dir, commit string) {

@@ -79,7 +79,8 @@ request, each only when something that feeds it changes: the generated licence
 and SBOM documents are rebuilt and compared with what is committed,
 `vendor.json` is checked against `go.mod` and the committed `lib/` and `vec/`,
 and `attestgen/` runs its own tests. A fourth job runs only on the push of a
-release tag and signs the release's provenance document; see
+release tag, vendors `lib/` and `vec/` again from the commits `vendor.json`
+names, and signs the release's provenance document; see
 [VERIFYING.md](VERIFYING.md). **Nothing else runs in CI** -- no tests of the
 driver, no cross-builds, so run those yourself. Platform coverage is checked by the
 [modernc.org builder](https://modern-c.appspot.com/-/builder/?importpath=modernc.org%2fsqlite)

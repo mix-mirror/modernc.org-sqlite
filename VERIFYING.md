@@ -18,7 +18,14 @@ Releases tagged before this job existed have no document.
   the `.gitlab-ci.yml` of the commit the document names.
 - Before signing, that pipeline checked that the tag named the commit and that
   `vendor.json` agreed with `go.mod` and with the committed `lib/` and `vec/`
-  (`internal/vendorstamp`). It then downloaded the module twice, once from
+  (`internal/vendorstamp`), and it cloned the `libsqlite3` and `libsqlite_vec`
+  commits `vendor.json` names and vendored again from them, without the
+  cross-builds (`make vendor-check`). Every file `vendor.json` covers
+  (`lib/sqlite*.go`, `vec/vec*.go`, `LICENSE-SQLITE_VEC`) came back byte for
+  byte, with no file missing or extra, and so did `vendor.json` itself apart
+  from the Go release it records: `vendor` in the document is the maintainer's
+  stamp, and `builder.go` the Go that reproduced it. It then downloaded the
+  module twice, once from
   gitlab.com and once from proxy.golang.org checked against sum.golang.org,
   each into an empty cache, and got the same hashes from both. `observed` in
   the document gives the time window of those checks by the runner's clock; the
@@ -33,9 +40,9 @@ Releases tagged before this job existed have no document.
   pushed. Tags are pushed by hand; see HACKING.md.
 - Who pushed the tag. Only maintainers can create tags in this project, and
   whoever holds a maintainer account can push one and get it attested.
-- That `lib/` and `vec/` were really generated from the recorded commits.
-  `vendor.json` records what the sibling checkouts declared when `make vendor`
-  ran; `internal/vendorstamp` lists what that check can and cannot see.
+- That the Go in `libsqlite3` and `libsqlite_vec` at those commits is a
+  faithful transpilation of the C it comes from. The job reproduces the copy
+  of that Go into `lib/` and `vec/`, not the transpilation behind it.
 - More integrity than you already have. sum.golang.org already guarantees that
   everyone gets the same bytes for a version. The document adds where those
   bytes came from.

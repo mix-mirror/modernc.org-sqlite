@@ -13,11 +13,17 @@
 // Usage:
 //
 //	cd attestgen && go build -tags none -o ../attest .
+//	./attest -siblings [-C dir]
 //	./attest -observe [-C dir] [-o provenance.json]
 //	./attest -verify  provenance.json provenance.json.sigstore.json
 //	./attest -publish provenance.json provenance.json.sigstore.json
 //
 // -tag and -commit default to $CI_COMMIT_TAG and $CI_COMMIT_SHA.
+//
+// -siblings prints, one line per source vendor.json names, the repository to
+// clone, the commit, and the directory make vendor reads it from. The attest
+// job checks those commits out and runs make vendor-check, which vendors again
+// and fails unless lib/ and vec/ come out as committed.
 //
 // -observe checks that HEAD and the tag are the commit, then downloads the
 // module twice, each time into its own empty cache and with none of the
@@ -158,20 +164,21 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("attestgen: ")
 	var (
-		oObserve = flag.Bool("observe", false, "check the tag and the module, write the document")
-		oVerify  = flag.Bool("verify", false, "verify a document and its bundle")
-		oPublish = flag.Bool("publish", false, "store a document and its bundle, link them from the release")
-		oTag     = flag.String("tag", os.Getenv("CI_COMMIT_TAG"), "release tag")
-		oCommit  = flag.String("commit", os.Getenv("CI_COMMIT_SHA"), "commit the tag names")
-		oDir     = flag.String("C", ".", "repository checkout (-observe)")
-		oOut     = flag.String("o", docName, "document to write (-observe)")
-		oRetries = flag.Int("retries", 10, "attempts at the proxy while it does not know the version yet")
-		oWait    = flag.Duration("wait", time.Minute, "pause between those attempts")
-		oCosign  = flag.String("cosign", "cosign", "cosign binary (-verify, -publish)")
-		oModule  = flag.String("module", "modernc.org/sqlite", "module path")
-		oProject = flag.String("project", "cznic/sqlite", "GitLab project path")
-		oID      = flag.String("project-id", "9241019", "GitLab project ID")
-		oToken   = flag.String("check-token", "", "name of the variable holding the job's ID token, whose claims -observe checks before anything is signed")
+		oSiblings = flag.Bool("siblings", false, "print the repository, commit and directory of each source vendor.json names")
+		oObserve  = flag.Bool("observe", false, "check the tag and the module, write the document")
+		oVerify   = flag.Bool("verify", false, "verify a document and its bundle")
+		oPublish  = flag.Bool("publish", false, "store a document and its bundle, link them from the release")
+		oTag      = flag.String("tag", os.Getenv("CI_COMMIT_TAG"), "release tag")
+		oCommit   = flag.String("commit", os.Getenv("CI_COMMIT_SHA"), "commit the tag names")
+		oDir      = flag.String("C", ".", "repository checkout (-observe, -siblings)")
+		oOut      = flag.String("o", docName, "document to write (-observe)")
+		oRetries  = flag.Int("retries", 10, "attempts at the proxy while it does not know the version yet")
+		oWait     = flag.Duration("wait", time.Minute, "pause between those attempts")
+		oCosign   = flag.String("cosign", "cosign", "cosign binary (-verify, -publish)")
+		oModule   = flag.String("module", "modernc.org/sqlite", "module path")
+		oProject  = flag.String("project", "cznic/sqlite", "GitLab project path")
+		oID       = flag.String("project-id", "9241019", "GitLab project ID")
+		oToken    = flag.String("check-token", "", "name of the variable holding the job's ID token, whose claims -observe checks before anything is signed")
 	)
 	var insecure multiFlag
 	flag.Var(&insecure, "insecure-cosign-arg", "extra cosign verify-blob argument, for tests with a private trust root only; repeatable")
@@ -181,6 +188,8 @@ func main() {
 	v := verifier{p: p, cosign: *oCosign, cosignArgs: insecure}
 	var err error
 	switch {
+	case *oSiblings && !*oObserve && !*oVerify && !*oPublish && flag.NArg() == 0:
+		err = siblings(*oDir, os.Stdout)
 	case *oObserve && !*oVerify && !*oPublish && flag.NArg() == 0:
 		if *oToken != "" {
 			if err = p.checkClaims(os.Getenv(*oToken), *oTag, *oCommit); err != nil {
@@ -209,6 +218,50 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// ---- siblings
+
+// The sources vendor.json must name, in order, and where make vendor reads
+// each one from.
+var siblingSources = []struct{ module, into, repo, dir string }{
+	{"modernc.org/libsqlite3", "lib", "https://gitlab.com/cznic/libsqlite3.git", "../libsqlite3"},
+	{"modernc.org/libsqlite_vec", "vec", "https://gitlab.com/cznic/libsqlite_vec.git", "../libsqlite_vec"},
+}
+
+func siblings(dir string, out io.Writer) error {
+	b, err := os.ReadFile(filepath.Join(dir, "vendor.json"))
+	if err != nil {
+		return err
+	}
+	var stamp struct {
+		Sources []struct {
+			Module string `json:"module"`
+			Into   string `json:"into"`
+			Commit string `json:"commit"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal(b, &stamp); err != nil {
+		return fmt.Errorf("vendor.json: %v", err)
+	}
+	if len(stamp.Sources) != len(siblingSources) {
+		return fmt.Errorf("vendor.json names %d sources, want %d", len(stamp.Sources), len(siblingSources))
+	}
+	for i, want := range siblingSources {
+		got := stamp.Sources[i]
+		if got.Module != want.module || got.Into != want.into {
+			return fmt.Errorf("vendor.json source %d is %s into %s, want %s into %s", i, got.Module, got.Into, want.module, want.into)
+		}
+		if !commitRE.MatchString(got.Commit) {
+			return fmt.Errorf("vendor.json: %s commit %q is not a full SHA-1", got.Module, got.Commit)
+		}
+	}
+	for i, want := range siblingSources {
+		if _, err := fmt.Fprintf(out, "%s %s %s\n", want.repo, stamp.Sources[i].Commit, want.dir); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ---- observe

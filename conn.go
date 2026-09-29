@@ -235,11 +235,11 @@ var writeTimeFormats = map[string]string{
 
 func (c *conn) formatTime(t time.Time) string {
 	t = c.applyTimezone(t)
-	// Before configurable write time formats were supported,
-	// time.Time.String was used. Maintain that default to
-	// keep existing driver users formatting times the same.
+	// Preserve the legacy wall-clock layout, but omit the process-local
+	// monotonic reading. parseTimeString cannot restore it, so persisting it
+	// prevents a scanned time from matching the original value in SQL.
 	if c.writeTimeFormat == "" {
-		return t.String()
+		return t.Round(0).String()
 	}
 	return t.Format(c.writeTimeFormat)
 }

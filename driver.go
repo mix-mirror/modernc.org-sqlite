@@ -157,7 +157,8 @@ func defaultDriver() *Driver { return d }
 // (format 4 from https://www.sqlite.org/lang_datefunc.html#time_values with sub-second
 // precision and timezone specifier) and (2) "datetime" for YYYY-MM-DD HH:MM:SS
 // (format 3, matching the output of SQLite's datetime() function).
-// If this parameter is not specified, then the default String() format will be used.
+// If this parameter is not specified, then the default String() format will be
+// used, with the process-local monotonic clock reading removed.
 //
 // _time_integer_format: The name of a integer format to use when writing time values.
 // By default, the time is stored as string and the format can be set with _time_format

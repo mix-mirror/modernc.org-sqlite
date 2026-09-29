@@ -155,10 +155,15 @@ func defaultDriver() *Driver { return d }
 // _time_format: The name of a format to use when writing time values to the database.
 // The currently supported values are (1) "sqlite" for YYYY-MM-DD HH:MM:SS.SSS[+-]HH:MM
 // (format 4 from https://www.sqlite.org/lang_datefunc.html#time_values with sub-second
-// precision and timezone specifier) and (2) "datetime" for YYYY-MM-DD HH:MM:SS
-// (format 3, matching the output of SQLite's datetime() function).
+// precision and timezone specifier), (2) "datetime" for YYYY-MM-DD HH:MM:SS
+// (format 3, matching the output of SQLite's datetime() function), and
+// (3) "string_no_monotonic" for t.Round(0).String(), which preserves the default
+// wall-clock layout, timezone and nanosecond precision but omits the process-local
+// monotonic clock reading. This lets a scanned time match its stored text when
+// rebound in SQL. It does not rewrite existing strings containing a monotonic
+// reading; applications must normalize those values separately if needed.
 // If this parameter is not specified, then the default String() format will be
-// used, with the process-local monotonic clock reading removed.
+// used, including any monotonic clock reading.
 //
 // _time_integer_format: The name of a integer format to use when writing time values.
 // By default, the time is stored as string and the format can be set with _time_format

@@ -229,17 +229,18 @@ func (c *conn) applyTimezone(t time.Time) time.Time {
 // writeTimeFormats are the names and formats supported
 // by the `_time_format` DSN query param.
 var writeTimeFormats = map[string]string{
-	"sqlite":   parseTimeFormats[0],
-	"datetime": "2006-01-02 15:04:05",
+	"sqlite":              parseTimeFormats[0],
+	"datetime":            "2006-01-02 15:04:05",
+	"string_no_monotonic": "2006-01-02 15:04:05.999999999 -0700 MST",
 }
 
 func (c *conn) formatTime(t time.Time) string {
 	t = c.applyTimezone(t)
-	// Preserve the legacy wall-clock layout, but omit the process-local
-	// monotonic reading. parseTimeString cannot restore it, so persisting it
-	// prevents a scanned time from matching the original value in SQL.
+	// Before configurable write time formats were supported,
+	// time.Time.String was used. Maintain that default to
+	// keep existing driver users formatting times the same.
 	if c.writeTimeFormat == "" {
-		return t.Round(0).String()
+		return t.String()
 	}
 	return t.Format(c.writeTimeFormat)
 }

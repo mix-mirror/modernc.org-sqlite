@@ -22,7 +22,7 @@ func TestTimeParameterRoundTrip(t *testing.T) {
 	for _, columnType := range []string{"DATE", "DATETIME", "TIMESTAMP"} {
 		for _, prepared := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/prepared=%t", columnType, prepared), func(t *testing.T) {
-				db, err := sql.Open("sqlite", ":memory:")
+				db, err := sql.Open("sqlite", ":memory:?_time_format=string_no_monotonic")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -82,15 +82,52 @@ func TestTimeParameterRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTimeDefaultFormatNonMonotonic(t *testing.T) {
+func TestTimeDefaultFormatMonotonic(t *testing.T) {
+	value := time.Now()
+	if !strings.Contains(value.String(), " m=") {
+		t.Skip("time.Now does not contain a monotonic reading on this platform")
+	}
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE TABLE events (deadline TEXT UNIQUE)"); err != nil {
+		t.Fatal(err)
+	}
+	// These values have identical wall clocks, but their String representations
+	// must remain distinct under the default format.
+	if _, err := db.Exec("INSERT INTO events VALUES (?), (?)", value, value.Round(0)); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := db.QueryRow("SELECT deadline FROM events WHERE rowid=1").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != value.String() {
+		t.Fatalf("default format changed: got %q, want %q", stored, value.String())
+	}
+}
+
+func TestTimeStringFormats(t *testing.T) {
 	for _, value := range []time.Time{
+		time.Now(),
 		{},
 		time.Date(2021, 1, 2, 16, 39, 17, 123456789, time.UTC),
 		time.Date(2021, 1, 2, 16, 39, 17, 123456789, time.FixedZone("CST", 8*60*60)),
+		time.Date(2021, 1, 2, 16, 39, 17, 0, time.FixedZone("", -7*60*60)),
 	} {
-		c := &conn{}
-		if got, want := c.formatTime(value), value.String(); got != want {
-			t.Errorf("non-monotonic default format changed: got %q, want %q", got, want)
+		for _, tc := range []struct {
+			format string
+			want   string
+		}{
+			{"", value.String()},
+			{writeTimeFormats["string_no_monotonic"], value.Round(0).String()},
+		} {
+			c := &conn{writeTimeFormat: tc.format}
+			if got := c.formatTime(value); got != tc.want {
+				t.Errorf("format %q: got %q, want %q", tc.format, got, tc.want)
+			}
 		}
 	}
 }
@@ -98,7 +135,7 @@ func TestTimeDefaultFormatNonMonotonic(t *testing.T) {
 // Existing strings remain readable; reading them must not silently rewrite the
 // database. Applications must normalize old values before SQL equality matches.
 func TestTimeLegacyMonotonicString(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:?_time_format=string_no_monotonic")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,5 +161,31 @@ func TestTimeLegacyMonotonicString(t *testing.T) {
 	}
 	if raw != legacy {
 		t.Fatalf("reading rewrote a stored value: got %q", raw)
+	}
+}
+
+func TestTimeStringNoMonotonicOptions(t *testing.T) {
+	value := time.Now()
+	for _, tc := range []struct {
+		query string
+		want  any
+	}{
+		{"_timezone=UTC", value.UTC().String()},
+		{"_time_integer_format=unix_nano", value.UnixNano()},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			db, err := sql.Open("sqlite", ":memory:?_time_format=string_no_monotonic&"+tc.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			var got any
+			if err := db.QueryRow("SELECT ?", value).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("stored value = %#v, want %#v", got, tc.want)
+			}
+		})
 	}
 }

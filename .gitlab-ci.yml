@@ -126,7 +126,9 @@ attestgen:
 # out as committed. No artifacts: the document and bundle are stored in the
 # package registry only, and only once they verify. The image is pinned by
 # digest, since the job holds the identity cosign signs with; it is
-# golang:1.27.1, the toolchain vendor.json records.
+# golang:1.27.1. vendor-check compares everything in vendor.json but its go
+# field, which names the Go of the last make vendor, and the document's
+# builder.go records the Go that vendored again here.
 attest:
   stage: attest
   image: golang:1.27.1@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244

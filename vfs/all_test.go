@@ -5,6 +5,7 @@
 package vfs
 
 import (
+	"bytes"
 	"database/sql"
 	"io"
 	"io/fs"
@@ -12,8 +13,12 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/iotest"
+	"unsafe"
 
+	"modernc.org/libc"
+	"modernc.org/libc/sys/types"
 	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 func E(err error) string {
@@ -184,6 +189,48 @@ func TestVFSReadEOF(t *testing.T) {
 	}
 	if got != "hello" {
 		t.Fatalf("got %q, want %q", got, "hello")
+	}
+
+	// The query shows only that SQLite accepted what vfsRead returned. The
+	// VFS contract for a read that runs past the end of the file is the
+	// return code SQLITE_IOERR_SHORT_READ and a zeroed unread tail, so both
+	// are checked on vfsRead itself, reading 512 bytes of which the file
+	// holds the last 100.
+	const amt, have = 512, 100
+	data, err := os.ReadFile(filepath.Join(dir, dbname))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := fsys.Open(dbname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	tls := libc.NewTLS()
+	defer tls.Close()
+	pFile := libc.Xcalloc(tls, 1, types.Size_t(unsafe.Sizeof(VFSFile{})))
+	defer libc.Xfree(tls, pFile)
+	zBuf := libc.Xmalloc(tls, amt)
+	defer libc.Xfree(tls, zBuf)
+	buf := unsafe.Slice((*byte)(unsafe.Pointer(zBuf)), amt)
+	for i := range buf {
+		buf[i] = 0xff
+	}
+	h := addObject(&fileEntry{f: f})
+	defer removeObject(h)
+	(*VFSFile)(unsafe.Pointer(pFile)).fsFile = h
+
+	if rc := vfsRead(tls, pFile, zBuf, amt, int64(len(data)-have)); rc != sqlite3.SQLITE_IOERR_SHORT_READ {
+		t.Fatalf("vfsRead past the end of the file: rc %d, want SQLITE_IOERR_SHORT_READ (%d)", rc, sqlite3.SQLITE_IOERR_SHORT_READ)
+	}
+	if !bytes.Equal(buf[:have], data[len(data)-have:]) {
+		t.Fatal("vfsRead past the end of the file: the bytes it read differ from the end of the file")
+	}
+	for i, c := range buf[have:] {
+		if c != 0 {
+			t.Fatalf("vfsRead past the end of the file: byte %d of the unread tail is %#x, want 0", have+i, c)
+		}
 	}
 }
 

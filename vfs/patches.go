@@ -35,7 +35,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -135,7 +134,11 @@ func vfsOpen(tls *libc.TLS, pVfs uintptr, zName uintptr, pFile uintptr, flags in
 	h := addObject(&fileEntry{f: f, fs: e})
 	(*VFSFile)(unsafe.Pointer(p)).fsFile = h
 	if pOutFlags != 0 {
-		*(*int32)(unsafe.Pointer(pOutFlags)) = int32(os.O_RDONLY)
+		// SQLite reads the out-flags for SQLITE_OPEN_READONLY, and this VFS
+		// cannot write: vfsio has no xWrite, xTruncate or xSync. Reported as
+		// writable, a write with the journal off went to the missing xWrite
+		// and panicked.
+		*(*int32)(unsafe.Pointer(pOutFlags)) = sqlite3.SQLITE_OPEN_READONLY
 	}
 	(*VFSFile)(unsafe.Pointer(p)).base.pMethods = uintptr(unsafe.Pointer(&vfsio))
 	return sqlite3.SQLITE_OK

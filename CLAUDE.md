@@ -70,6 +70,12 @@ the fixed four-release order when a fix moves `libc` (libc -> libsqlite3 -> libs
 builders, `make sbom` after dependency changes), disclosure, and Phase 5 -- **a published Go
 module version cannot be recalled**, so `retract` plus a new release is the only remedy.
 
+`THREAT-MODEL.md` is the working sheet behind `SECURITY.md`'s scope: four surfaces (the DSN, the
+connection lifecycle, the page cache binding, the VFS bridge), five positions (A1 writes the DSN
+... A5 is another user of the same process), one row per concern with its status -- Fixed or
+Documented with the commit, Holds with where the code keeps it, Struck with the reason, Out of
+scope, or Open with what is missing. When a change touches one of those surfaces, update its row.
+
 ## Repository / release workflow
 
 - The canonical repo is GitLab `cznic/sqlite`. The GitHub `modernc-org/sqlite` mirror **does accept** issues and PRs, but PRs land via a manual cross-merge into GitLab — there can be a delay. The PRs listed in `CHANGELOG.md` (e.g. "merge request #113") are GitLab MR numbers, not GitHub PRs.

@@ -64,8 +64,8 @@ embedded in both JSON documents as well.
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | `BSD-3-Clause` | `pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec` |
 | Go | -- | `BSD-3-Clause` | -- |
 | go-netdb | -- | `MIT` | -- |
-| golang.org/x/sys | v0.47.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/sys@v0.47.0` |
-| modernc.org/libc | v1.75.7 | `BSD-3-Clause` | `pkg:golang/modernc.org/libc@v1.75.7` |
+| golang.org/x/sys | v0.48.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/sys@v0.48.0` |
+| modernc.org/libc | v1.77.1 | `BSD-3-Clause` | `pkg:golang/modernc.org/libc@v1.77.1` |
 | modernc.org/mathutil | v1.7.1 | `BSD-3-Clause` | `pkg:golang/modernc.org/mathutil@v1.7.1` |
 | modernc.org/memory | v1.12.1 | `BSD-3-Clause AND LicenseRef-L5` | `pkg:golang/modernc.org/memory@v1.12.1` |
 | musl libc | -- | `MIT` | -- |
@@ -90,11 +90,11 @@ embedded in both JSON documents as well.
 | github.com/ianlancetaylor/demangle | v0.0.0-20250417193237-f615e6bd150b | `BSD-3-Clause` | `pkg:golang/github.com/ianlancetaylor/demangle@v0.0.0-20250417193237-f615e6bd150b` |
 | github.com/mattn/go-isatty | v0.0.24 | `MIT` | `pkg:golang/github.com/mattn/go-isatty@v0.0.24` |
 | github.com/ncruces/go-strftime | v1.0.0 | `MIT` | `pkg:golang/github.com/ncruces/go-strftime@v1.0.0` |
-| golang.org/x/mod | v0.38.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/mod@v0.38.0` |
-| golang.org/x/sync | v0.22.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/sync@v0.22.0` |
-| golang.org/x/tools | v0.48.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/tools@v0.48.0` |
-| modernc.org/cc/v4 | v4.29.2 | `BSD-3-Clause` | `pkg:golang/modernc.org/cc/v4@v4.29.2` |
-| modernc.org/ccgo/v4 | v4.35.0 | `BSD-3-Clause` | `pkg:golang/modernc.org/ccgo/v4@v4.35.0` |
+| golang.org/x/mod | v0.41.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/mod@v0.41.0` |
+| golang.org/x/sync | v0.23.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/sync@v0.23.0` |
+| golang.org/x/tools | v0.50.0 | `BSD-3-Clause` | `pkg:golang/golang.org/x/tools@v0.50.0` |
+| modernc.org/cc/v4 | v4.29.7 | `BSD-3-Clause` | `pkg:golang/modernc.org/cc/v4@v4.29.7` |
+| modernc.org/ccgo/v4 | v4.36.1 | `BSD-3-Clause` | `pkg:golang/modernc.org/ccgo/v4@v4.36.1` |
 | modernc.org/gc/v2 | v2.6.5 | `BSD-3-Clause` | `pkg:golang/modernc.org/gc/v2@v2.6.5` |
 | modernc.org/gc/v3 | v3.1.5 | `BSD-3-Clause` | `pkg:golang/modernc.org/gc/v3@v3.1.5` |
 | modernc.org/goabi0 | v0.2.0 | `BSD-3-Clause` | `pkg:golang/modernc.org/goabi0@v0.2.0` |

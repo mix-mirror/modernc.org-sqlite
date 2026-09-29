@@ -1,12 +1,12 @@
 module modernc.org/sqlite
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	modernc.org/fileutil v1.4.0
-	modernc.org/libc v1.75.7
+	modernc.org/libc v1.77.1
 	modernc.org/mathutil v1.7.1
 )
 

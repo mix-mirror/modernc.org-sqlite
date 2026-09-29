@@ -258,7 +258,9 @@ func main() {
 			case *gc.ConstDeclNode:
 				switch y := x.ConstSpec.(type) {
 				case *gc.ConstSpecNode:
-					if y.IDENT.Src() != "SQLITE_TRANSIENT" {
+					// SQLITE_STATIC and SQLITE_TRANSIENT are defined by hand in
+					// lib/defs.go as typed uintptr constants.
+					if nm := y.IDENT.Src(); nm != "SQLITE_TRANSIENT" && nm != "SQLITE_STATIC" {
 						fmt.Fprintln(b, x.Source(true))
 					}
 				default:
@@ -386,7 +388,8 @@ type Sqlite3_vtab_cursor = sqlite3_vtab_cursor
 				case *gc.ConstDeclNode:
 					switch y := x.ConstSpec.(type) {
 					case *gc.ConstSpecNode:
-						if y.IDENT.Src() != "SQLITE_TRANSIENT" {
+						// Same as for lib/ above.
+						if nm := y.IDENT.Src(); nm != "SQLITE_TRANSIENT" && nm != "SQLITE_STATIC" {
 							fmt.Fprintln(b, x.Source(true))
 						}
 					default:

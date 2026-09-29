@@ -514,11 +514,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/golang.org/x/mod@v0.38.0",
+      "bom-ref": "pkg:golang/golang.org/x/mod@v0.41.0",
       "name": "golang.org/x/mod",
-      "version": "v0.38.0",
+      "version": "v0.41.0",
       "scope": "excluded",
-      "purl": "pkg:golang/golang.org/x/mod@v0.38.0",
+      "purl": "pkg:golang/golang.org/x/mod@v0.41.0",
       "licenses": [
         {
           "license": {
@@ -533,7 +533,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/golang.org/x/mod/@v/v0.38.0.zip"
+          "url": "https://proxy.golang.org/golang.org/x/mod/@v/v0.41.0.zip"
         }
       ],
       "properties": [
@@ -545,11 +545,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/golang.org/x/sync@v0.22.0",
+      "bom-ref": "pkg:golang/golang.org/x/sync@v0.23.0",
       "name": "golang.org/x/sync",
-      "version": "v0.22.0",
+      "version": "v0.23.0",
       "scope": "excluded",
-      "purl": "pkg:golang/golang.org/x/sync@v0.22.0",
+      "purl": "pkg:golang/golang.org/x/sync@v0.23.0",
       "licenses": [
         {
           "license": {
@@ -564,7 +564,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/golang.org/x/sync/@v/v0.22.0.zip"
+          "url": "https://proxy.golang.org/golang.org/x/sync/@v/v0.23.0.zip"
         }
       ],
       "properties": [
@@ -576,11 +576,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/golang.org/x/sys@v0.47.0",
+      "bom-ref": "pkg:golang/golang.org/x/sys@v0.48.0",
       "name": "golang.org/x/sys",
-      "version": "v0.47.0",
+      "version": "v0.48.0",
       "scope": "required",
-      "purl": "pkg:golang/golang.org/x/sys@v0.47.0",
+      "purl": "pkg:golang/golang.org/x/sys@v0.48.0",
       "licenses": [
         {
           "license": {
@@ -595,7 +595,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/golang.org/x/sys/@v/v0.47.0.zip"
+          "url": "https://proxy.golang.org/golang.org/x/sys/@v/v0.48.0.zip"
         }
       ],
       "properties": [
@@ -607,11 +607,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/golang.org/x/tools@v0.48.0",
+      "bom-ref": "pkg:golang/golang.org/x/tools@v0.50.0",
       "name": "golang.org/x/tools",
-      "version": "v0.48.0",
+      "version": "v0.50.0",
       "scope": "excluded",
-      "purl": "pkg:golang/golang.org/x/tools@v0.48.0",
+      "purl": "pkg:golang/golang.org/x/tools@v0.50.0",
       "licenses": [
         {
           "license": {
@@ -626,7 +626,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/golang.org/x/tools/@v/v0.48.0.zip"
+          "url": "https://proxy.golang.org/golang.org/x/tools/@v/v0.50.0.zip"
         }
       ],
       "properties": [
@@ -638,11 +638,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/modernc.org/cc/v4@v4.29.2",
+      "bom-ref": "pkg:golang/modernc.org/cc/v4@v4.29.7",
       "name": "modernc.org/cc/v4",
-      "version": "v4.29.2",
+      "version": "v4.29.7",
       "scope": "excluded",
-      "purl": "pkg:golang/modernc.org/cc/v4@v4.29.2",
+      "purl": "pkg:golang/modernc.org/cc/v4@v4.29.7",
       "licenses": [
         {
           "license": {
@@ -657,7 +657,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/modernc.org/cc/v4/@v/v4.29.2.zip"
+          "url": "https://proxy.golang.org/modernc.org/cc/v4/@v/v4.29.7.zip"
         }
       ],
       "properties": [
@@ -669,11 +669,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/modernc.org/ccgo/v4@v4.35.0",
+      "bom-ref": "pkg:golang/modernc.org/ccgo/v4@v4.36.1",
       "name": "modernc.org/ccgo/v4",
-      "version": "v4.35.0",
+      "version": "v4.36.1",
       "scope": "excluded",
-      "purl": "pkg:golang/modernc.org/ccgo/v4@v4.35.0",
+      "purl": "pkg:golang/modernc.org/ccgo/v4@v4.36.1",
       "licenses": [
         {
           "license": {
@@ -688,7 +688,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/modernc.org/ccgo/v4/@v/v4.35.0.zip"
+          "url": "https://proxy.golang.org/modernc.org/ccgo/v4/@v/v4.36.1.zip"
         }
       ],
       "properties": [
@@ -829,11 +829,11 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:golang/modernc.org/libc@v1.75.7",
+      "bom-ref": "pkg:golang/modernc.org/libc@v1.77.1",
       "name": "modernc.org/libc",
-      "version": "v1.75.7",
+      "version": "v1.77.1",
       "scope": "required",
-      "purl": "pkg:golang/modernc.org/libc@v1.75.7",
+      "purl": "pkg:golang/modernc.org/libc@v1.77.1",
       "licenses": [
         {
           "license": {
@@ -848,7 +848,7 @@
         },
         {
           "type": "distribution",
-          "url": "https://proxy.golang.org/modernc.org/libc/@v/v1.75.7.zip"
+          "url": "https://proxy.golang.org/modernc.org/libc/@v/v1.77.1.zip"
         }
       ],
       "properties": [
@@ -1143,9 +1143,9 @@
         "pkg:golang/github.com/mattn/go-isatty@v0.0.24",
         "pkg:golang/github.com/ncruces/go-strftime@v1.0.0",
         "pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec",
-        "pkg:golang/golang.org/x/sys@v0.47.0",
+        "pkg:golang/golang.org/x/sys@v0.48.0",
         "pkg:golang/modernc.org/fileutil@v1.4.0",
-        "pkg:golang/modernc.org/libc@v1.75.7",
+        "pkg:golang/modernc.org/libc@v1.77.1",
         "pkg:golang/modernc.org/mathutil@v1.7.1",
         "pkg:golang/modernc.org/memory@v1.12.1",
         "repo:SQLite-TCL-test-suite",
@@ -1163,7 +1163,7 @@
       "dependsOn": [
         "pkg:golang/github.com/chzyer/readline@v1.5.1",
         "pkg:golang/github.com/ianlancetaylor/demangle@v0.0.0-20250417193237-f615e6bd150b",
-        "pkg:golang/golang.org/x/sys@v0.47.0"
+        "pkg:golang/golang.org/x/sys@v0.48.0"
       ]
     },
     {
@@ -1178,7 +1178,7 @@
     {
       "ref": "pkg:golang/github.com/mattn/go-isatty@v0.0.24",
       "dependsOn": [
-        "pkg:golang/golang.org/x/sys@v0.47.0"
+        "pkg:golang/golang.org/x/sys@v0.48.0"
       ]
     },
     {
@@ -1188,22 +1188,22 @@
       "ref": "pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec"
     },
     {
-      "ref": "pkg:golang/golang.org/x/mod@v0.38.0"
+      "ref": "pkg:golang/golang.org/x/mod@v0.41.0"
     },
     {
-      "ref": "pkg:golang/golang.org/x/sync@v0.22.0"
+      "ref": "pkg:golang/golang.org/x/sync@v0.23.0"
     },
     {
-      "ref": "pkg:golang/golang.org/x/sys@v0.47.0"
+      "ref": "pkg:golang/golang.org/x/sys@v0.48.0"
     },
     {
-      "ref": "pkg:golang/golang.org/x/tools@v0.48.0"
+      "ref": "pkg:golang/golang.org/x/tools@v0.50.0"
     },
     {
-      "ref": "pkg:golang/modernc.org/cc/v4@v4.29.2"
+      "ref": "pkg:golang/modernc.org/cc/v4@v4.29.7"
     },
     {
-      "ref": "pkg:golang/modernc.org/ccgo/v4@v4.35.0"
+      "ref": "pkg:golang/modernc.org/ccgo/v4@v4.36.1"
     },
     {
       "ref": "pkg:golang/modernc.org/fileutil@v1.4.0",
@@ -1222,7 +1222,7 @@
       "ref": "pkg:golang/modernc.org/goabi0@v0.2.0"
     },
     {
-      "ref": "pkg:golang/modernc.org/libc@v1.75.7",
+      "ref": "pkg:golang/modernc.org/libc@v1.77.1",
       "dependsOn": [
         "pkg:golang/github.com/dustin/go-humanize@v1.0.1",
         "pkg:golang/github.com/google/uuid@v1.6.0",
@@ -1230,12 +1230,12 @@
         "pkg:golang/github.com/mattn/go-isatty@v0.0.24",
         "pkg:golang/github.com/ncruces/go-strftime@v1.0.0",
         "pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec",
-        "pkg:golang/golang.org/x/mod@v0.38.0",
-        "pkg:golang/golang.org/x/sync@v0.22.0",
-        "pkg:golang/golang.org/x/sys@v0.47.0",
-        "pkg:golang/golang.org/x/tools@v0.48.0",
-        "pkg:golang/modernc.org/cc/v4@v4.29.2",
-        "pkg:golang/modernc.org/ccgo/v4@v4.35.0",
+        "pkg:golang/golang.org/x/mod@v0.41.0",
+        "pkg:golang/golang.org/x/sync@v0.23.0",
+        "pkg:golang/golang.org/x/sys@v0.48.0",
+        "pkg:golang/golang.org/x/tools@v0.50.0",
+        "pkg:golang/modernc.org/cc/v4@v4.29.7",
+        "pkg:golang/modernc.org/ccgo/v4@v4.36.1",
         "pkg:golang/modernc.org/fileutil@v1.4.0",
         "pkg:golang/modernc.org/gc/v2@v2.6.5",
         "pkg:golang/modernc.org/gc/v3@v3.1.5",
@@ -1258,7 +1258,7 @@
       "ref": "pkg:golang/modernc.org/memory@v1.12.1",
       "dependsOn": [
         "pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec",
-        "pkg:golang/golang.org/x/sys@v0.47.0",
+        "pkg:golang/golang.org/x/sys@v0.48.0",
         "pkg:golang/modernc.org/mathutil@v1.7.1"
       ]
     },

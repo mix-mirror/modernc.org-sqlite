@@ -2,6 +2,9 @@
 
 Entries for v1.38.1 through v1.44.1 and for v1.49.1 were added on 2026-09-05, reconstructed from the git history and the merge requests they cite; they were missing at release time.
 
+ - 2026-09-29 v1.60.1:
+     - Binding arguments to a statement is no longer quadratic in the number of its parameters, which made multi-row `INSERT`s with thousands of `?` parameters slow. Resolves [GitHub issue #8](https://github.com/modernc-org/sqlite/issues/8), thanks wencycool!
+
  - 2026-09-28 v1.60.0:
      - **A fault while reading the memory-mapped `-shm` file of a WAL database no longer crashes the process.** The statement fails with a disk I/O error, extended code `SQLITE_IOERR_IN_PAGE` (8714), and the connection stays usable, as in MSVC builds of SQLite. On by default on every platform and not switchable; `lib.SehInject` and `lib.SehPending` inject such a fault for tests. Resolves [GitLab issue #221](https://gitlab.com/cznic/sqlite/-/issues/221), thanks Roman (@requilence) for the report, and supersedes [libsqlite3!4](https://gitlab.com/cznic/libsqlite3/-/merge_requests/4) and [GitHub pull request #7](https://github.com/modernc-org/sqlite/pull/7), thanks hazyhaar for the two rounds, the `ccgo` finding and the Windows Server runs!
      - Re-vendor `lib/` from [modernc.org/libsqlite3 v1.15.0](https://gitlab.com/cznic/libsqlite3/-/tags/v1.15.0) and `vec/` from [modernc.org/libsqlite_vec v0.6.0](https://gitlab.com/cznic/libsqlite_vec/-/tags/v0.6.0); SQLite stays 3.53.4 and sqlite-vec v0.1.9. **Go 1.26 is now required**, and the pinned `modernc.org/libc` becomes [v1.77.1](https://gitlab.com/cznic/libc/-/tags/v1.77.1); as always, downstream `go.mod` files must pin the same `modernc.org/libc` version this repository's `go.mod` does, see [GitLab issue #177](https://gitlab.com/cznic/sqlite/-/issues/177).

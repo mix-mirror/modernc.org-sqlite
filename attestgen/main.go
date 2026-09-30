@@ -449,7 +449,10 @@ func (p project) compare(tag, commit string, direct, proxied *modInfo) error {
 	if o == nil {
 		return errors.New("the direct download reported no origin")
 	}
-	if o.VCS != "git" || o.URL != p.origin() || o.Subdir != "" || o.Ref != "refs/tags/"+tag || o.Hash != commit {
+	// The go command reports the repository URL as the go-import tag gives
+	// it: modernc.org's names https://gitlab.com/cznic/sqlite, GitLab's own
+	// for a gitlab.com path adds .git. Both name the same repository.
+	if o.VCS != "git" || (o.URL != p.origin() && o.URL != p.origin()+".git") || o.Subdir != "" || o.Ref != "refs/tags/"+tag || o.Hash != commit {
 		return fmt.Errorf("the direct download came from %s %s %s at %s, subdirectory %q; want git %s refs/tags/%s at %s",
 			o.VCS, o.URL, o.Ref, o.Hash, o.Subdir, p.origin(), tag, commit)
 	}

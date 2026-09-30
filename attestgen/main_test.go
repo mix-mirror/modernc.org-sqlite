@@ -56,6 +56,12 @@ func TestCompare(t *testing.T) {
 	if d, p := goodDownloads(); testProject.compare(testTag, testCommit, d, p) != nil {
 		t.Fatal("refused a good pair")
 	}
+	if d, p := goodDownloads(); func() error {
+		d.Origin.URL += ".git"
+		return testProject.compare(testTag, testCommit, d, p)
+	}() != nil {
+		t.Fatal("refused the repository URL with .git, as GitLab's go-import tag gives it")
+	}
 	for _, tc := range []struct {
 		name string
 		edit func(d, p *modInfo)
@@ -68,6 +74,8 @@ func TestCompare(t *testing.T) {
 		{"no origin", func(d, p *modInfo) { d.Origin = nil }},
 		{"origin vcs", func(d, p *modInfo) { d.Origin.VCS = "hg" }},
 		{"origin url", func(d, p *modInfo) { d.Origin.URL = "https://gitlab.com/someone/sqlite" }},
+		{"origin url with .git", func(d, p *modInfo) { d.Origin.URL = "https://gitlab.com/someone/sqlite.git" }},
+		{"origin url with more than .git", func(d, p *modInfo) { d.Origin.URL = "https://gitlab.com/cznic/sqlite.git/x" }},
 		{"origin subdir", func(d, p *modInfo) { d.Origin.Subdir = "v2" }},
 		{"origin ref", func(d, p *modInfo) { d.Origin.Ref = "refs/heads/" + testTag }},
 		{"origin commit", func(d, p *modInfo) { d.Origin.Hash = strings.Repeat("f", 40) }},

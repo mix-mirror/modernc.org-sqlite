@@ -58,7 +58,7 @@ or v2.6.2 or later. Older versions are affected by
 [GHSA-whqx-f9j3-ch6m](https://github.com/sigstore/cosign/security/advisories/GHSA-whqx-f9j3-ch6m).
 
 ```
-V=v1.60.0
+V=vX.Y.Z   # a release whose GitLab release links a provenance document
 P=https://gitlab.com/api/v4/projects/cznic%2Fsqlite/packages/generic/attestation/$V
 curl -fsSLO $P/provenance.json
 curl -fsSLO $P/provenance.json.sigstore.json

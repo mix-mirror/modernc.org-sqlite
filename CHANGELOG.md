@@ -2,6 +2,9 @@
 
 Entries for v1.38.1 through v1.44.1 and for v1.49.1 were added on 2026-09-05, reconstructed from the git history and the merge requests they cite; they were missing at release time.
 
+ - 2026-09-30 v1.61.0:
+     - Add `_time_format=string_no_monotonic`, **opt-in**: times are written in the default layout but without Go's monotonic clock reading, the ` m=+...` suffix, so a scanned time matches its row again when bound in `WHERE col = ?`. The default is unchanged. Resolves [GitLab issue #259](https://gitlab.com/cznic/sqlite/-/issues/259). See [GitLab merge request #142](https://gitlab.com/cznic/sqlite/-/merge_requests/142), thanks 不插电 (@r27153733)!
+
  - 2026-09-29 v1.60.1:
      - Binding arguments to a statement is no longer quadratic in the number of its parameters, which made multi-row `INSERT`s with thousands of `?` parameters slow. Resolves [GitHub issue #8](https://github.com/modernc-org/sqlite/issues/8), thanks wencycool!
 

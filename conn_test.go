@@ -526,3 +526,37 @@ func benchParseTimeScan(b *testing.B) {
 func BenchmarkParseTimeScan(b *testing.B) {
 	benchParseTimeScan(b)
 }
+
+// Closing a connection must forget the hooks registered for its handle: the
+// handle value can be reused by a connection opened later.
+func TestHooksCloseCleanup(t *testing.T) {
+	c, err := newConn(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := c.db
+	c.RegisterPreUpdateHook(func(SQLitePreUpdateData) {})
+	c.RegisterCommitHook(func() int32 { return 0 })
+	c.RegisterRollbackHook(func() {})
+	registered := func() (preUpdate, commit, rollback bool) {
+		xPreUpdateHandlers.mu.RLock()
+		_, preUpdate = xPreUpdateHandlers.m[db]
+		xPreUpdateHandlers.mu.RUnlock()
+		xCommitHandlers.mu.RLock()
+		_, commit = xCommitHandlers.m[db]
+		xCommitHandlers.mu.RUnlock()
+		xRollbackHandlers.mu.RLock()
+		_, rollback = xRollbackHandlers.m[db]
+		xRollbackHandlers.mu.RUnlock()
+		return preUpdate, commit, rollback
+	}
+	if p, c, r := registered(); !p || !c || !r {
+		t.Fatalf("hooks registered: pre-update %v, commit %v, rollback %v, want all true", p, c, r)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if p, c, r := registered(); p || c || r {
+		t.Fatalf("closed connection retained hooks: pre-update %v, commit %v, rollback %v", p, c, r)
+	}
+}

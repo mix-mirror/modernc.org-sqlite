@@ -1017,6 +1017,7 @@ func (c *conn) Close() (err error) {
 
 	if c.db != 0 {
 		unregisterAuthorizer(c.db)
+		unregisterHooks(c.db)
 		if err := c.closeV2(c.db); err != nil {
 			return err
 		}

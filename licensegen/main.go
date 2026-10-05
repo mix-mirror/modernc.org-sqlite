@@ -277,7 +277,29 @@ func download(mods []string) map[string]string {
 	cmd.Stderr = &stderr
 	b, err := cmd.Output()
 	if err != nil {
-		log.Fatalf("go mod download %s: %v\n%s", strings.Join(mods, " "), err, stderr.String())
+		// When a module cannot be fetched, go mod download -json exits 1 with
+		// that module's error in its JSON object on stdout and nothing on
+		// stderr. The exit status alone said nothing about which module or
+		// why, so report every error the output carries.
+		var msg strings.Builder
+		dec := json.NewDecoder(bytes.NewReader(b))
+		for {
+			var m struct{ Path, Version, Error string }
+			if dec.Decode(&m) != nil {
+				break
+			}
+
+			if m.Error != "" {
+				fmt.Fprintf(&msg, "\n\t%s@%s: %s", m.Path, m.Version, strings.TrimPrefix(m.Error, m.Path+"@"+m.Version+": "))
+			}
+		}
+		if s := strings.TrimSpace(stderr.String()); s != "" {
+			fmt.Fprintf(&msg, "\n%s", s)
+		}
+		if msg.Len() == 0 {
+			fmt.Fprintf(&msg, "\n\t%s", strings.Join(mods, " "))
+		}
+		log.Fatalf("go mod download: %v%s", err, msg.String())
 	}
 
 	r := map[string]string{}

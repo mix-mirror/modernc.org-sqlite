@@ -241,10 +241,14 @@ func defaultDriver() *Driver { return d }
 // Defensive mode is a hardening measure, not a sandbox for hostile database
 // files. It is one of several steps SQLite recommends for that purpose (see
 // https://www.sqlite.org/security.html); this build compiles with neither
-// SQLITE_TRUSTED_SCHEMA=0 nor SQLITE_DQS=0 and the driver exposes no
-// authorizer, so _defensive=1 alone does not make opening an untrusted file
-// safe. It is also a property of the connection, not of the database: another
-// connection to the same file, opened without the parameter, is unrestricted.
+// SQLITE_TRUSTED_SCHEMA=0 nor SQLITE_DQS=0, so _defensive=1 alone does not make
+// opening an untrusted file safe. The driver exposes SQLite's authorizer as an
+// opt-in [AuthorizerRegisterer] capability. For pool-wide enforcement, install
+// the policy on every newly opened physical connection with
+// [RegisterConnectionHook] (or [Driver.RegisterConnectionHook] on a
+// caller-constructed Driver); database/sql's Conn.Raw is the per-connection
+// escape hatch. The policy is a property of the connection, not of the
+// database: another connection to the same file without it is unrestricted.
 // See: https://www.sqlite.org/c3ref/c_dbconfig_defensive.html
 //
 // _error_rc: Opt-in error-string reporting mode for synthesised errors.

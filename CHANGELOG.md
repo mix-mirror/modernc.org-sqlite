@@ -5,6 +5,7 @@ Entries for v1.38.1 through v1.44.1 and for v1.49.1 were added on 2026-09-05, re
  - 2026-09-30 v1.61.0:
      - Add `_time_format=string_no_monotonic`, **opt-in**: times are written in the default layout but without Go's monotonic clock reading, the ` m=+...` suffix, so a scanned time matches its row again when bound in `WHERE col = ?`. The default is unchanged. Resolves [GitLab issue #259](https://gitlab.com/cznic/sqlite/-/issues/259). See [GitLab merge request #142](https://gitlab.com/cznic/sqlite/-/merge_requests/142), thanks 不插电 (@r27153733)!
      - Each release tag now gets a signed provenance document, linked from its GitLab release; `VERIFYING.md` says what it proves and how to check one. Tooling only. See [GitLab merge request #141](https://gitlab.com/cznic/sqlite/-/merge_requests/141).
+     - Add an opt-in SQLite authorizer per connection: `AuthorizerRegisterer`, reached through `sql.Conn.Raw` or installed on every pooled connection from `RegisterConnectionHook`; existing connections are unchanged. Resolves [GitLab issue #256](https://gitlab.com/cznic/sqlite/-/issues/256). See [GitLab merge request #139](https://gitlab.com/cznic/sqlite/-/merge_requests/139), thanks Tedla Brandsema (@TedlaBrandsema)!
 
  - 2026-09-29 v1.60.1:
      - Binding arguments to a statement is no longer quadratic in the number of its parameters, which made multi-row `INSERT`s with thousands of `?` parameters slow. Resolves [GitHub issue #8](https://github.com/modernc-org/sqlite/issues/8), thanks wencycool!

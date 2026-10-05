@@ -1016,6 +1016,7 @@ func (c *conn) Close() (err error) {
 	defer c.Unlock()
 
 	if c.db != 0 {
+		unregisterAuthorizer(c.db)
 		if err := c.closeV2(c.db); err != nil {
 			return err
 		}

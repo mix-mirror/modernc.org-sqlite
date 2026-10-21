@@ -148,7 +148,9 @@ vendor:
 # names, as the attest job in .gitlab-ci.yml does, the stamp is reproduced
 # rather than taken on trust. The files are deleted before the copy, which
 # leaves nothing for undup -expand to do: all of them are generated, so one
-# the recipe no longer writes shows up as deleted.
+# the recipe no longer writes shows up as deleted. On success the committed
+# vendor.json is checked out again, so the tree is left as committed and not
+# stamped with the Go that ran here.
 vendor-check: export GOTOOLCHAIN := local
 vendor-check:
 	$(vendor_preflight)
@@ -158,6 +160,7 @@ vendor-check:
 	rm -f vendor
 	git diff --exit-code --stat -I '^ *"go": ' -- vendor.json lib vec LICENSE-SQLITE_VEC
 	test -z "$$(git status --porcelain --untracked-files=all --ignored -- lib vec LICENSE-SQLITE_VEC)"
+	git checkout -q -- vendor.json
 
 work:
 	rm -f go.work*

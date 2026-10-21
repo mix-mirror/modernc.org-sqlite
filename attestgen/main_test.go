@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -191,9 +192,13 @@ func TestSiblings(t *testing.T) {
 func gitRepo(t *testing.T, tag string) (dir, commit string) {
 	t.Helper()
 	dir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "vendor.json"), []byte("{\n\t\"go\": \"go1.27.1\"\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][]string{
 		{"init", "-q"},
-		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"},
+		{"add", "vendor.json"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"},
 		{"tag", tag},
 	} {
 		if _, err := runGit(dir, args...); err != nil {
@@ -202,9 +207,6 @@ func gitRepo(t *testing.T, tag string) (dir, commit string) {
 	}
 	commit, err := revParse(dir, "HEAD")
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "vendor.json"), []byte("{\n\t\"go\": \"go1.27.1\"\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir, commit
@@ -275,6 +277,51 @@ func TestObserve(t *testing.T) {
 	if d.Commit != commit || d.ZipH1 != testZip || d.GoModH1 != testGoMod || d.VendorSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("document %+v", d)
 	}
+
+	t.Run("working tree stamped again", func(t *testing.T) {
+		// make vendor-check leaves vendor.json stamped with the job's Go. The
+		// document carries the committed copy, the one the module holds.
+		path := filepath.Join(dir, "vendor.json")
+		if err := os.WriteFile(path, []byte("{\n\t\"go\": \"go1.27.9\"\n}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.WriteFile(path, vendor, 0o644)
+		s := &script{reply: reply}
+		o := observer{p: testProject, retries: 3, download: s.download}
+		if err := o.observe(dir, testTag, commit, out); err != nil {
+			t.Fatal(err)
+		}
+		d, err := readDocument(out, testProject, testTag)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var a, b bytes.Buffer
+		if json.Compact(&a, vendor) != nil || json.Compact(&b, d.Vendor) != nil || !bytes.Equal(a.Bytes(), b.Bytes()) || d.VendorSHA256 != hex.EncodeToString(sum[:]) {
+			t.Fatalf("document carries the working tree's vendor.json: %+v", d)
+		}
+	})
+	t.Run("vendor.json not committed", func(t *testing.T) {
+		if _, err := runGit(dir, "rm", "-q", "--cached", "vendor.json"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runGit(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "w"); err != nil {
+			t.Fatal(err)
+		}
+		defer runGit(dir, "reset", "-q", "--hard", commit)
+		head, err := revParse(dir, "HEAD")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runGit(dir, "tag", "-f", testTag, head); err != nil {
+			t.Fatal(err)
+		}
+		defer runGit(dir, "tag", "-f", testTag, commit)
+		s := &script{reply: reply}
+		o := observer{p: testProject, retries: 3, download: s.download}
+		if err := o.observe(dir, testTag, head, out); err == nil || len(s.calls) != 0 {
+			t.Fatalf("no committed vendor.json: err %v, %d downloads", err, len(s.calls))
+		}
+	})
 
 	t.Run("HEAD elsewhere", func(t *testing.T) {
 		if _, err := runGit(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "y"); err != nil {

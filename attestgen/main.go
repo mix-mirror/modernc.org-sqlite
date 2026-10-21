@@ -25,7 +25,9 @@
 // job checks those commits out and runs make vendor-check, which vendors again
 // and fails unless lib/ and vec/ come out as committed.
 //
-// -observe checks that HEAD and the tag are the commit, then downloads the
+// -observe checks that HEAD and the tag are the commit, takes vendor.json
+// from that commit rather than from the working tree, which make vendor-check
+// has just stamped again with the job's Go, then downloads the
 // module twice, each time into its own empty cache and with none of the
 // caller's Go or git settings: once straight from gitlab.com, once from
 // proxy.golang.org checked against sum.golang.org. It writes the document
@@ -290,7 +292,11 @@ func (o observer) observe(dir, tag, commit, out string) error {
 			return fmt.Errorf("%s is %s, want %s", ref, got, commit)
 		}
 	}
-	vendor, err := os.ReadFile(filepath.Join(dir, "vendor.json"))
+	// The committed vendor.json, not the working tree's: make vendor-check
+	// has just stamped the tree again with this job's Go, and the document,
+	// like the module the proxy serves, describes the commit. The v1.61.0
+	// job read the tree and failed its own verification over the go field.
+	vendor, err := gitShow(dir, commit, "vendor.json")
 	if err != nil {
 		return err
 	}
@@ -506,6 +512,18 @@ func (p project) checkClaims(token, tag, commit string) error {
 		}
 	}
 	return nil
+}
+
+// gitShow returns the file at path in commit, as committed.
+func gitShow(dir, commit, path string) ([]byte, error) {
+	out, err := exec.Command("git", "-C", dir, "show", commit+":"+path).Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) != 0 {
+			return nil, fmt.Errorf("git show %s:%s: %s", commit, path, strings.TrimSpace(string(ee.Stderr)))
+		}
+		return nil, fmt.Errorf("git show %s:%s: %v", commit, path, err)
+	}
+	return out, nil
 }
 
 func revParse(dir, rev string) (string, error) {

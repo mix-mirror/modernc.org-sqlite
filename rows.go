@@ -5,6 +5,7 @@
 package sqlite // import "modernc.org/sqlite"
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -42,18 +43,26 @@ type rows struct {
 	parseFmtIdx []int8
 	pstmt       uintptr
 
+	// ctx is the context of the query. Next and Close can wait for a lock:
+	// the step that finishes an autocommit write with a RETURNING clause
+	// commits it, and so does finalizing or resetting such a statement
+	// before it has finished; in rollback-journal mode the commit waits,
+	// under busy_timeout, for the lock a reader on another connection
+	// holds. The wait ends once ctx is done, see conn.withWaitCtx.
+	ctx context.Context
+
 	doStep    bool
 	empty     bool
 	reuseStmt bool // If true, Close() resets instead of finalizing
 }
 
-func newRows(c *conn, pstmt uintptr, allocs *[]uintptr, empty bool) (r *rows, err error) {
+func newRows(ctx context.Context, c *conn, pstmt uintptr, allocs *[]uintptr, empty bool) (r *rows, err error) {
 	var a []uintptr
 	if allocs != nil {
 		a = *allocs
 		*allocs = nil
 	}
-	r = &rows{c: c, pstmt: pstmt, allocs: a, empty: empty}
+	r = &rows{c: c, pstmt: pstmt, allocs: a, empty: empty, ctx: ctx}
 
 	defer func() {
 		if err != nil {
@@ -81,20 +90,24 @@ func newRows(c *conn, pstmt uintptr, allocs *[]uintptr, empty bool) (r *rows, er
 	return r, nil
 }
 
-// Close closes the rows iterator.
+// Close closes the rows iterator. A wait for a lock, see the ctx field, ends
+// once the query's context is done, with the context's error; the write is
+// then rolled back, as it is when busy_timeout runs out.
 func (r *rows) Close() (err error) {
 	r.c.freeAllocs(r.allocs)
 	r.allocs = nil
 
-	if r.reuseStmt {
-		// Reset the statement for reuse instead of finalizing it
-		if e := r.c.reset(r.pstmt); e != nil {
-			return e
+	return r.c.withWaitCtx(r.ctx, func() error {
+		if r.reuseStmt {
+			// Reset the statement for reuse instead of finalizing it
+			if e := r.c.reset(r.pstmt); e != nil {
+				return e
+			}
+			return r.c.clearBindings(r.pstmt)
 		}
-		return r.c.clearBindings(r.pstmt)
-	}
 
-	return r.c.finalize(r.pstmt)
+		return r.c.finalize(r.pstmt)
+	})
 }
 
 // Columns returns the names of the columns. The number of columns of the
@@ -108,6 +121,10 @@ func (r *rows) Columns() (c []string) {
 // provided slice will be the same size as the Columns() are wide.
 //
 // Next should return io.EOF when there are no more rows.
+//
+// A wait for a lock, see the ctx field, ends once the query's context is done,
+// with the context's error; the write is then rolled back, as it is when
+// busy_timeout runs out.
 func (r *rows) Next(dest []driver.Value) (err error) {
 	if r.empty {
 		return io.EOF
@@ -115,7 +132,7 @@ func (r *rows) Next(dest []driver.Value) (err error) {
 
 	rc := sqlite3.SQLITE_ROW
 	if r.doStep {
-		if rc, err = r.c.step(r.pstmt); err != nil {
+		if rc, err = r.step(); err != nil {
 			return err
 		}
 	}
@@ -240,6 +257,20 @@ func (r *rows) Next(dest []driver.Value) (err error) {
 	default:
 		return r.c.errstr(int32(rc))
 	}
+}
+
+// step is conn.step for the rows' statement, with the lock wait ending once
+// the query's context is done.
+func (r *rows) step() (rc int, err error) {
+	if r.ctx == nil || r.ctx.Done() == nil {
+		return r.c.step(r.pstmt)
+	}
+
+	err = r.c.withWaitCtx(r.ctx, func() (err error) {
+		rc, err = r.c.step(r.pstmt)
+		return err
+	})
+	return rc, err
 }
 
 // RowsColumnTypeDatabaseTypeName may be implemented by Rows. It should return

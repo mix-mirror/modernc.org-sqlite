@@ -1271,6 +1271,33 @@ func (c *conn) newStmtContext(ctx context.Context, query string) (*stmt, error) 
 	return s, err
 }
 
+// withWaitCtx runs f with ctx as the context of the call in progress, so that
+// a wait for a lock in f, under busy_timeout or with a shared cache, ends once
+// ctx is done, see busyHandler and retry; the outer call's context is restored
+// afterwards. A failure of f once ctx is done is reported as ctx.Err(). Only
+// the waits watch ctx: f is not interrupted, and a ctx without a deadline or
+// cancellation changes nothing.
+func (c *conn) withWaitCtx(ctx context.Context, f func() error) error {
+	if ctx == nil || ctx.Done() == nil {
+		return f()
+	}
+
+	prevWaitCtx := c.waitCtx
+	c.waitCtx = ctx
+	defer func() { c.waitCtx = prevWaitCtx }()
+
+	c.ensureBusyHandler()
+	if err := f(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 // Queryer is an optional interface that may be implemented by a Conn.
 //
 // If a Conn does not implement Queryer, the sql package's DB.Query will first

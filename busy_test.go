@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -58,9 +59,13 @@ func busyTestConns(t *testing.T, dir, name, busyTimeout, journalMode, lockSQL st
 
 // A wait for a lock under busy_timeout ends once the context of the call is
 // done, with the context's error, instead of lasting until the timeout. See
-// https://gitlab.com/cznic/sqlite/-/issues/262.
+// https://gitlab.com/cznic/sqlite/-/issues/262 and, for Commit, Rows.Next and
+// Rows.Close, https://gitlab.com/cznic/sqlite/-/issues/263.
 func TestBusyTimeoutWaitEndsWithContext(t *testing.T) {
 	const busyTimeout = 10 * time.Second
+	// A reader's open transaction in rollback-journal mode holds a SHARED
+	// lock, which blocks a commit on another connection but not its writes
+	const readerLock = "BEGIN; SELECT count(*) FROM t"
 	dir := t.TempDir()
 	for _, tc := range []struct {
 		name           string
@@ -96,6 +101,64 @@ func TestBusyTimeoutWaitEndsWithContext(t *testing.T) {
 			}
 			return err
 		}},
+		// The COMMIT waits for the reader's lock with the context given to
+		// BeginTx
+		{"Commit", "", readerLock, false, func(ctx context.Context, c *sql.Conn) error {
+			tx, err := c.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec("INSERT INTO t VALUES (1)"); err != nil {
+				return err
+			}
+			return tx.Commit()
+		}},
+		// The step that finishes an autocommit INSERT ... RETURNING commits it
+		{"RowsNext", "", readerLock, false, func(ctx context.Context, c *sql.Conn) error {
+			rows, err := c.QueryContext(ctx, "INSERT INTO t VALUES (1) RETURNING x")
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			if !rows.Next() {
+				return fmt.Errorf("no first row: %v", rows.Err())
+			}
+			for rows.Next() {
+			}
+			return rows.Err()
+		}},
+		// Finalizing it after its first row commits it too
+		{"RowsClose", "", readerLock, false, func(ctx context.Context, c *sql.Conn) error {
+			rows, err := c.QueryContext(ctx, "INSERT INTO t VALUES (1) RETURNING x")
+			if err != nil {
+				return err
+			}
+			if !rows.Next() {
+				return fmt.Errorf("no first row: %v", rows.Err())
+			}
+			return rows.Close()
+		}},
+		// As does resetting it, when the statement is a prepared one
+		{"StmtRowsClose", "", readerLock, false, func(ctx context.Context, c *sql.Conn) error {
+			s, err := c.PrepareContext(context.Background(), "INSERT INTO t VALUES (1) RETURNING x")
+			if err != nil {
+				return err
+			}
+			defer s.Close()
+			rows, err := s.QueryContext(ctx)
+			if err != nil {
+				return err
+			}
+			if !rows.Next() {
+				return fmt.Errorf("no first row: %v", rows.Err())
+			}
+			return rows.Close()
+		}},
+		// Row.Scan closes the rows after the first row
+		{"QueryRowScan", "", readerLock, false, func(ctx context.Context, c *sql.Conn) error {
+			var x int
+			return c.QueryRowContext(ctx, "INSERT INTO t VALUES (1) RETURNING x").Scan(&x)
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			holder, other := busyTestConns(t, dir, "busy-ctx-"+tc.name+".db", "10000", tc.journalMode, tc.lockSQL, tc.otherAfterLock)
@@ -113,11 +176,129 @@ func TestBusyTimeoutWaitEndsWithContext(t *testing.T) {
 			if _, err := holder.ExecContext(context.Background(), "ROLLBACK"); err != nil {
 				t.Fatal(err)
 			}
-			// The connection is usable again
+			// The connection is usable again, and the write the context
+			// ended was rolled back, not committed late
 			if _, err := other.ExecContext(context.Background(), "INSERT INTO t VALUES (2)"); err != nil {
 				t.Fatalf("the connection after the ended wait: %v", err)
 			}
+			var n int
+			if err := other.QueryRowContext(context.Background(), "SELECT count(*) FROM t").Scan(&n); err != nil || n != 1 {
+				t.Fatalf("got %d rows, %v; want 1", n, err)
+			}
 		})
+	}
+}
+
+// Without a context that ends, a COMMIT, and closing the rows of an autocommit
+// INSERT ... RETURNING, keep waiting the busy_timeout for a reader's lock and
+// fail with SQLITE_BUSY; a lock released in time is taken.
+func TestBusyTimeoutCommitUnchangedWithoutContext(t *testing.T) {
+	dir := t.TempDir()
+	holder, other := busyTestConns(t, dir, "busy-commit-bg.db", "300", "", "BEGIN; SELECT count(*) FROM t", false)
+	ctx := context.Background()
+	live, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	wantBusy := func(t *testing.T, name string, err error, elapsed time.Duration) {
+		t.Helper()
+		var e *Error
+		if !errors.As(err, &e) || e.Code() != 5 { // SQLITE_BUSY
+			t.Fatalf("%s: got %v after %v, want SQLITE_BUSY", name, err, elapsed)
+		}
+		if elapsed < 300*time.Millisecond || elapsed > 5*time.Second {
+			t.Fatalf("%s: waited %v, want about the 300 ms busy_timeout", name, elapsed)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+	}{{"Background", ctx}, {"LiveContext", live}} {
+		tx, err := other.BeginTx(tc.ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec("INSERT INTO t VALUES (1)"); err != nil {
+			t.Fatal(err)
+		}
+		start := time.Now()
+		err = tx.Commit()
+		wantBusy(t, "Commit/"+tc.name, err, time.Since(start))
+
+		rows, err := other.QueryContext(tc.ctx, "INSERT INTO t VALUES (1) RETURNING x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !rows.Next() {
+			t.Fatalf("no first row: %v", rows.Err())
+		}
+		start = time.Now()
+		err = rows.Close()
+		wantBusy(t, "Rows.Close/"+tc.name, err, time.Since(start))
+	}
+
+	// The lock is released while COMMIT waits: the commit goes through
+	tx, err := other.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("INSERT INTO t VALUES (2)"); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		holder.ExecContext(ctx, "ROLLBACK")
+	}()
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("after the lock was released: %v", err)
+	}
+	var n int
+	if err := other.QueryRowContext(ctx, "SELECT count(*) FROM t").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("got %d rows, %v; want 1", n, err)
+	}
+}
+
+// Rollback does not watch the context given to BeginTx: once that context is
+// done, database/sql rolls the transaction back through it, and the ROLLBACK
+// has to run then for the connection to leave the transaction.
+func TestBusyTimeoutRollbackAfterContextDone(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "rollback.db")+"?_pragma=busy_timeout(10000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// One connection: the next call waits for the rollback to release it
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("CREATE TABLE t (x INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("INSERT INTO t VALUES (1)"); err != nil {
+		t.Fatal(err)
+	}
+	<-ctx.Done()
+	if err := tx.Commit(); !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, sql.ErrTxDone) {
+		t.Fatalf("Commit after the context ended: %v", err)
+	}
+
+	// The connection is outside any transaction and the write is gone
+	bg := context.Background()
+	tx2, err := db.BeginTx(bg, nil)
+	if err != nil {
+		t.Fatalf("BeginTx after the rollback: %v", err)
+	}
+	var n int
+	if err := tx2.QueryRowContext(bg, "SELECT count(*) FROM t").Scan(&n); err != nil || n != 0 {
+		t.Fatalf("got %d rows, %v; want 0", n, err)
+	}
+	if err := tx2.Commit(); err != nil {
+		t.Fatal(err)
 	}
 }
 

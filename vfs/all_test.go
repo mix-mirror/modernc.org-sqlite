@@ -6,6 +6,7 @@ package vfs
 
 import (
 	"database/sql"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing/iotest"
 
 	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 func E(err error) string {
@@ -161,6 +163,46 @@ func (fsys *wrappedReadFS) Open(name string) (fs.File, error) {
 		r:      fsys.wrap(f),
 		wrap:   fsys.wrap,
 	}, nil
+}
+
+// TestVFSWriteRefused checks that a database opened through the VFS is
+// read-only to SQLite. Writes must fail with SQLITE_READONLY, including with
+// the journal off, where a file reported as writable reaches xWrite, which
+// this VFS does not have.
+func TestVFSWriteRefused(t *testing.T) {
+	const dbname = "readonly_canary.db"
+	dir := t.TempDir()
+	seedDB(t, dir, dbname,
+		"CREATE TABLE t (v TEXT NOT NULL)",
+		"INSERT INTO t (v) VALUES ('hello')",
+	)
+
+	db := openDBViaVFS(t, dbname, os.DirFS(dir))
+	db.SetMaxOpenConns(1)
+
+	for _, q := range []string{
+		"UPDATE t SET v = 'changed'",
+		"PRAGMA journal_mode=OFF",
+		"UPDATE t SET v = 'changed'",
+		"DELETE FROM t",
+	} {
+		_, err := db.Exec(q)
+		if q == "PRAGMA journal_mode=OFF" {
+			if err != nil {
+				t.Fatalf("%s: %s", q, E(err))
+			}
+			continue
+		}
+		var se *sqlite.Error
+		if !errors.As(err, &se) || se.Code()&0xff != sqlite3.SQLITE_READONLY {
+			t.Fatalf("%s: got %s, want SQLITE_READONLY", q, E(err))
+		}
+	}
+
+	var got string
+	if err := db.QueryRow("SELECT v FROM t").Scan(&got); err != nil || got != "hello" {
+		t.Fatalf("after the refused writes: %q, %s", got, E(err))
+	}
 }
 
 // TestVFSReadEOF verifies that vfsRead handles readers that return

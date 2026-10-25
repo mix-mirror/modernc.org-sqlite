@@ -113,6 +113,42 @@ var vfsio = sqlite3_io_methods{
 	iVersion: 1, // iVersion
 }
 
+// The methods a read-only VFS has no use for are implemented all the same: a
+// nil method in the table is a crash should SQLite ever call it, a method that
+// fails is an error. SQLite consults the SQLITE_OPEN_READONLY out-flag that
+// vfsOpen reports before every write path, so these are not expected to run.
+// The other methods are wired in patches32.go and patches64.go.
+func init() {
+	*(*func(*libc.TLS, uintptr, uintptr, int32, sqlite_int64) int32)(unsafe.Pointer(&vfsio.xWrite)) = vfsWriteReadOnly
+	*(*func(*libc.TLS, uintptr, sqlite_int64) int32)(unsafe.Pointer(&vfsio.xTruncate)) = vfsTruncateReadOnly
+	*(*func(*libc.TLS, uintptr, int32) int32)(unsafe.Pointer(&vfsio.xSync)) = vfsSyncReadOnly
+}
+
+func vfsWriteReadOnly(tls *libc.TLS, pFile uintptr, zBuf uintptr, iAmt int32, iOfst sqlite_int64) int32 {
+	return sqlite3.SQLITE_READONLY
+}
+
+func vfsTruncateReadOnly(tls *libc.TLS, pFile uintptr, size sqlite_int64) int32 {
+	return sqlite3.SQLITE_READONLY
+}
+
+// A file nothing can write to is always in sync.
+func vfsSyncReadOnly(tls *libc.TLS, pFile uintptr, flags int32) int32 {
+	return sqlite3.SQLITE_OK
+}
+
+// vfsDeleteReadOnly is the xDelete of a VFS made by New: nothing is deleted
+// through a read-only file system. SQLite calls xDelete without consulting the
+// read-only flag, to remove a journal it believes it no longer needs: when
+// PRAGMA journal_mode leaves PERSIST or TRUNCATE, and on the first read of a
+// 0-byte database that has a -journal file next to it. Both callers tolerate
+// the failure. The vfsDelete transpiled from vfs.c is a stub that aborts the
+// process, and would unlink the path on the host file system if it did not;
+// New replaces it.
+func vfsDeleteReadOnly(tls *libc.TLS, pVfs uintptr, zPath uintptr, dirSync int32) int32 {
+	return sqlite3.SQLITE_IOERR_DELETE
+}
+
 func vfsOpen(tls *libc.TLS, pVfs uintptr, zName uintptr, pFile uintptr, flags int32, pOutFlags uintptr) int32 {
 	if zName == 0 {
 		return sqlite3.SQLITE_IOERR
@@ -249,6 +285,9 @@ func New(fs fs.FS) (name string, _ *FS, _ error) {
 		tls.Close()
 		return "", nil, fmt.Errorf("out of memory")
 	}
+
+	// The C side wires the vfsDelete transpiled from vfs.c, see vfsDeleteReadOnly
+	*(*func(*libc.TLS, uintptr, uintptr, int32) int32)(unsafe.Pointer(&(*sqlite3_vfs)(unsafe.Pointer(vfs)).xDelete)) = vfsDeleteReadOnly
 
 	if rc := sqlite3.Xsqlite3_vfs_register(tls, vfs, libc.Bool32(false)); rc != sqlite3.SQLITE_OK {
 		removeObject(h)

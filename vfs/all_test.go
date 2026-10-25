@@ -397,3 +397,162 @@ func TestVFSReadEOFZeroFill(t *testing.T) {
 		t.Fatal("expected at least one readable row from intact pages")
 	}
 }
+
+// seedWALDB creates filepath.Join(srcDir, name) in WAL mode, runs stmts on it
+// and copies the database and its -wal file to servedDir while the connection
+// is still open: closing it would checkpoint the WAL and remove the file. The
+// copy is a WAL database shipped together with its WAL, as one lands in an
+// embed.FS when it is copied from a live application.
+func seedWALDB(t *testing.T, srcDir, servedDir, name string, stmts ...string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(srcDir, name)+"?_pragma=journal_mode(WAL)")
+	if err != nil {
+		t.Fatalf("open database: %s", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("exec %q: %s", s, E(err))
+		}
+	}
+	for _, n := range []string{name, name + "-wal"} {
+		b, err := os.ReadFile(filepath.Join(srcDir, n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(servedDir, n), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestVFSWALReadOnlyClose opens a WAL database shipped together with its -wal
+// file. Without xShmMap SQLite accepts WAL only in exclusive locking mode,
+// where the wal-index lives in heap memory, and closing a WAL database
+// checkpoints it unless the file is read-only to SQLite: reported writable,
+// the checkpoint reached the xWrite this VFS did not have and the process
+// panicked. The read goes through the WAL, the close leaves the files alone,
+// and the database opens again.
+func TestVFSWALReadOnlyClose(t *testing.T) {
+	const dbname = "wal_canary.db"
+	srcDir, servedDir := t.TempDir(), t.TempDir()
+	seedWALDB(t, srcDir, servedDir, dbname,
+		"CREATE TABLE t (v TEXT NOT NULL)",
+		"INSERT INTO t (v) VALUES ('from the wal')",
+	)
+	walBefore, err := os.ReadFile(filepath.Join(servedDir, dbname+"-wal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(walBefore) == 0 {
+		t.Fatal("the seeded WAL is empty")
+	}
+
+	vfsid, vfsFS, err := New(os.DirFS(servedDir))
+	if err != nil {
+		t.Fatalf("register vfs: %s", err)
+	}
+	defer vfsFS.Close()
+	for i := 0; i < 2; i++ {
+		db, err := sql.Open("sqlite", "file:"+dbname+"?vfs="+vfsid+"&_pragma=locking_mode(EXCLUSIVE)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		if err := db.QueryRow("SELECT v FROM t").Scan(&got); err != nil || got != "from the wal" {
+			t.Fatalf("open %d: got %q, %s", i, got, E(err))
+		}
+		if err := db.Close(); err != nil {
+			t.Fatalf("open %d: close: %s", i, E(err))
+		}
+		walAfter, err := os.ReadFile(filepath.Join(servedDir, dbname+"-wal"))
+		if err != nil {
+			t.Fatalf("open %d: after the close: %s", i, err)
+		}
+		if !bytes.Equal(walAfter, walBefore) {
+			t.Fatalf("open %d: the close changed the WAL file", i)
+		}
+	}
+}
+
+// TestVFSDeleteRefused checks that nothing is deleted through the VFS. SQLite
+// asks xDelete to remove a journal it believes it no longer needs, without
+// consulting the read-only flag: when PRAGMA journal_mode leaves PERSIST or
+// TRUNCATE, and on the first read of a 0-byte database that has a -journal
+// file next to it. The xDelete transpiled from vfs.c aborted the process; the
+// one New installs deletes nothing and fails with SQLITE_IOERR_DELETE, which
+// both callers tolerate. The database names are relative, as the path SQLite
+// asks to delete then is, so a file of that name in the working directory
+// must survive, and so must the journal in the served file system.
+func TestVFSDeleteRefused(t *testing.T) {
+	const dbname, emptyname = "delete_canary.db", "empty_canary.db"
+	served := t.TempDir()
+	seedDB(t, served, dbname,
+		"CREATE TABLE t (v TEXT NOT NULL)",
+		"INSERT INTO t (v) VALUES ('hello')",
+	)
+	if err := os.WriteFile(filepath.Join(served, emptyname), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(served, emptyname+"-journal"), []byte("not a journal"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := t.TempDir()
+	t.Chdir(host)
+	decoys := []string{dbname + "-journal", emptyname + "-journal"}
+	for _, n := range decoys {
+		if err := os.WriteFile(filepath.Join(host, n), []byte("a host file"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	vfsid, vfsFS, err := New(os.DirFS(served))
+	if err != nil {
+		t.Fatalf("register vfs: %s", err)
+	}
+	defer vfsFS.Close()
+
+	// Leaving persist and truncate asks for the journal to be deleted
+	db, err := sql.Open("sqlite", "file:"+dbname+"?vfs="+vfsid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	for _, mode := range []string{"persist", "delete", "truncate", "off"} {
+		var got string
+		if err := db.QueryRow("PRAGMA journal_mode=" + mode).Scan(&got); err != nil || got != mode {
+			t.Fatalf("PRAGMA journal_mode=%s: got %q, %s", mode, got, E(err))
+		}
+	}
+	var v string
+	if err := db.QueryRow("SELECT v FROM t").Scan(&v); err != nil || v != "hello" {
+		t.Fatalf("after the journal_mode changes: %q, %s", v, E(err))
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// A 0-byte database next to a journal: the first read asks for the
+	// journal to be deleted
+	edb, err := sql.Open("sqlite", "file:"+emptyname+"?vfs="+vfsid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := edb.QueryRow("SELECT count(*) FROM sqlite_master").Scan(&n); err != nil || n != 0 {
+		t.Fatalf("the empty database: %d, %s", n, E(err))
+	}
+	if err := edb.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range decoys {
+		if _, err := os.Stat(filepath.Join(host, n)); err != nil {
+			t.Errorf("the file in the working directory: %v", err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(served, emptyname+"-journal")); err != nil {
+		t.Errorf("the journal in the served file system: %v", err)
+	}
+}

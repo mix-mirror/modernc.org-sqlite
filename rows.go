@@ -18,7 +18,7 @@ import (
 )
 
 type rows struct {
-	allocs  []uintptr
+	allocs  []cBinding
 	c       *conn
 	columns []string
 	// decltypes holds the uppercased declared types for every result column,
@@ -56,8 +56,8 @@ type rows struct {
 	reuseStmt bool // If true, Close() resets instead of finalizing
 }
 
-func newRows(ctx context.Context, c *conn, pstmt uintptr, allocs *[]uintptr, empty bool) (r *rows, err error) {
-	var a []uintptr
+func newRows(ctx context.Context, c *conn, pstmt uintptr, allocs *[]cBinding, empty bool) (r *rows, err error) {
+	var a []cBinding
 	if allocs != nil {
 		a = *allocs
 		*allocs = nil
@@ -94,8 +94,9 @@ func newRows(ctx context.Context, c *conn, pstmt uintptr, allocs *[]uintptr, emp
 // once the query's context is done, with the context's error; the write is
 // then rolled back, as it is when busy_timeout runs out.
 func (r *rows) Close() (err error) {
-	r.c.freeAllocs(r.allocs)
+	allocs := r.allocs
 	r.allocs = nil
+	r.c.freeAllocs(allocs)
 
 	return r.c.withWaitCtx(r.ctx, func() error {
 		if r.reuseStmt {
@@ -103,7 +104,7 @@ func (r *rows) Close() (err error) {
 			if e := r.c.reset(r.pstmt); e != nil {
 				return e
 			}
-			return r.c.clearBindings(r.pstmt)
+			return r.c.clearBindings(r.pstmt, allocs)
 		}
 
 		return r.c.finalize(r.pstmt)

@@ -497,8 +497,13 @@ func (s *stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (dr d
 //
 //	int sqlite3_clear_bindings(sqlite3_stmt*);
 func (c *conn) clearBindings(pstmt uintptr) error {
-	if rc := sqlite3.Xsqlite3_clear_bindings(c.tls, pstmt); rc != sqlite3.SQLITE_OK {
-		return c.errstr(rc)
+	// Not sqlite3_clear_bindings: since SQLite 3.54 it expires any statement
+	// with a plan-sensitive parameter, forcing a re-prepare on the next step.
+	// Callers have already reset pstmt, as sqlite3_bind_null requires.
+	for i := sqlite3.Xsqlite3_bind_parameter_count(c.tls, pstmt); i > 0; i-- {
+		if rc := sqlite3.Xsqlite3_bind_null(c.tls, pstmt, i); rc != sqlite3.SQLITE_OK {
+			return c.errstr(rc)
+		}
 	}
 	return nil
 }
